@@ -16,5 +16,8 @@
     "redis": "^4.7.0",
     "ua-parser-js": "^2.0.0",
     "user-agent-parser": "^0.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.12.0"
   }
 }

@@ -32,6 +32,8 @@ const analytics_schema = new mongoose.Schema(
       {
         user_id: String,
         username: String,
+        os_name: String,
+        device_name: String,
       },
     ],
   },
