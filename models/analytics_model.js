@@ -2,9 +2,9 @@ const mongoose = require("mongoose");
 
 const analytics_schema = new mongoose.Schema(
   {
-    // user_id: { type: String, required: true, index: true },
+    user_id: { type: String, required: true },
     short_url: { type: String, required: true },
-    topic: { type: String, index: true },
+    topic: { type: String },
     long_url: { type: String, required: true },
     total_clicks: { type: Number, default: 0 },
     unique_users: { type: Number, default: 0 },
