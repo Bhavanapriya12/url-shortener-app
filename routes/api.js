@@ -18,7 +18,7 @@ const { redis } = require("googleapis/build/src/apis/redis");
 const oauth2Client = new google.auth.OAuth2(
   process.env.CLIENT_ID,
   process.env.CLIENT_SECRET,
-  "http://localhost:8001/api/oauth_callback"
+  "https://url-shortener-app-zv5u.onrender.com/api/oauth_callback"
 );
 //-------------------Google signin-----------
 router.post("/social_login", async (req, res) => {
@@ -74,7 +74,7 @@ router.get("/oauth_callback", async (req, res) => {
           { expiresIn: "7d" }
         );
         console.log("token--->", token);
-        let redirect_url = `http://localhost:8001/?token:${token}`;
+        let redirect_url = `https://url-shortener-app-zv5u.onrender.com/api-docs/?token:${token}`;
         return res.redirect(redirect_url);
       }
     }
@@ -94,8 +94,21 @@ router.get("/oauth_callback", async (req, res) => {
  *     tags:
  *       - URL Shortener
  *     security:
- *       - BearerAuth: []
+ *       - ApiKeyAuth: []  # This should match the security scheme defined in swaggerDefinition
+ *     parameters:
+ *       - in: header
+ *         name: x-auth-token
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: "Authentication token required to access this endpoint"
  *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
  *               longUrl:
  *                 type: string
  *                 description: The long URL to shorten.
@@ -111,29 +124,8 @@ router.get("/oauth_callback", async (req, res) => {
  *     responses:
  *       200:
  *         description: Shortened URL created successfully.
- *         reponse:
- *
- *                 message:
- *                   type: string
- *                   example: "Created Shorten Url Successfully"
- *                 data:
- *                   type: object
- *                   properties:
- *
- *                     short_url:
- *                       type: string
- *                       example: "https://short.ly/my-custom-alias"
- *
- *                     createdAt:
- *                       type: string
- *                       format: date-time
- *                       example: "2025-01-30T12:34:56.789Z"
  *       400:
  *         description: Validation error (e.g., missing required fields).
- *         content:
- *                 message:
- *                   type: string
- *                   example: "longUrl is required"
  *       401:
  *         description: Unauthorized - User authentication required.
  *       500:
