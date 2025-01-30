@@ -15,6 +15,16 @@ const swaggerDefinition = {
       description: "Deployed Staging Server",
     },
   ],
+  components: {
+    securitySchemes: {
+      ApiKeyAuth: {
+        type: "apiKey",
+        in: "header", // Token is passed in the headers
+        name: "x-auth-token", // Name of the header where the token should be sent
+        description: "Enter your authentication token",
+      },
+    },
+  },
 };
 
 const options = {
