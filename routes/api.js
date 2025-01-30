@@ -9,11 +9,9 @@ const redisFunctions = require("../helpers/redis_functions");
 const jwt = require("jsonwebtoken");
 const { google } = require("googleapis");
 const validations = require("../helpers/validations");
-const { redisInsert } = require("../helpers/redis_functions");
 const rateLimit = require("../helpers/rate_limiter");
 const { Auth } = require("../middlewares/auth");
 const user_agent_parser = require("ua-parser-js");
-const { redis } = require("googleapis/build/src/apis/redis");
 
 const oauth2Client = new google.auth.OAuth2(
   process.env.CLIENT_ID,
