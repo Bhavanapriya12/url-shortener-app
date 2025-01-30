@@ -12,7 +12,7 @@ const swaggerDefinition = {
   servers: [
     {
       url: "https://url-shortener-app-zv5u.onrender.com",
-      description: "Deployed Staging Server",
+      description: "Deployed Staging Server link[Render]",
     },
   ],
   components: {

@@ -63,12 +63,12 @@ router.post("/social_login", async (req, res) => {
  *   get:
  *     summary: Google Login Callback (Sign Up / Sign In)
  *     description: |
- *       This is the callback route for Google Login.  
- *       - When a user logs in using Google, they are sent back to this route with a special **code**.  
- *       - The server uses this code to get the user's Google profile (name, email, etc.).  
- *       - If the user is **new**, they are automatically **registered** in the database.  
- *       - If the user **already exists**, they are simply **logged in**.  
- *       - A **JWT token** is created for the user, which can be used to access protected routes.  
+ *       This is the callback route for Google Login.
+ *       - When a user logs in using Google, they are sent back to this route with a special **code**.
+ *       - The server uses this code to get the user's Google profile (name, email, etc.).
+ *       - If the user is **new**, they are automatically **registered** in the database.
+ *       - If the user **already exists**, they are simply **logged in**.
+ *       - A **JWT token** is created for the user, which can be used to access protected routes.
  *       - Finally, the user is redirected to the API documentation with the token in the URL.
  *     tags:
  *       - Authentication
@@ -79,12 +79,12 @@ router.post("/social_login", async (req, res) => {
  *         schema:
  *           type: string
  *         description: |
- *           A special code given by Google after a user logs in.  
+ *           A special code given by Google after a user logs in.
  *           The server exchanges this code for an access token to get user details.
  *     responses:
  *       302:
  *         description: |
- *           Login or registration successful!  
+ *           Login or registration successful!
  *           The user is redirected to the API documentation with a JWT token.
  *         headers:
  *           Location:
@@ -93,18 +93,17 @@ router.post("/social_login", async (req, res) => {
  *               example: "https://url-shortener-app-zv5u.onrender.com/api-docs/?token=your-jwt-token"
  *       400:
  *         description: |
- *           Something went wrong! The code may be expired or invalid.  
+ *           Something went wrong! The code may be expired or invalid.
  *           Try logging in again.
  *       500:
  *         description: |
- *           Internal Server Error!  
+ *           Internal Server Error!
  *           Something went wrong on our end. Please try again later or contact support.
  *         content:
  *           application/json:
  *             example:
  *               message: "Internal Server Error"
  */
-
 
 router.get("/oauth_callback", async (req, res) => {
   console.log("query --->", req.query);
@@ -232,6 +231,61 @@ router.post("/shorten", Auth, rateLimit(60, 60), async (req, res) => {
     data: analytics_object,
   });
 });
+/**
+ * @swagger
+ * /api/shorten/{alias}:
+ *   get:
+ *     summary: Redirect to original URL based on short URL alias
+ *     description: |
+ *       This endpoint allows you to access the original long URL by using a short URL alias.
+ *       - The alias is used to find the shortened URL in the database.
+ *       - The number of clicks for the alias is tracked, and the user's device and OS information are logged for analytics.
+ *       - This route also tracks the unique clicks per user, device, and operating system (OS).
+ *     tags:
+ *       - URL Shortener
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: alias
+ *         required: true
+ *         description: The alias of the shortened URL.
+ *         schema:
+ *           type: string
+ *           example: "my-custom-alias"
+ *     responses:
+ *       200:
+ *         description: |
+ *           Redirects the user to the original long URL. The number of clicks is incremented in the analytics database.
+ *         content:
+ *           application/json:
+ *             example:
+ *               message: "Redirecting to the original URL..."
+ *       400:
+ *         description: |
+ *           Bad request. The alias parameter must be provided.
+ *         content:
+ *           application/json:
+ *             example:
+ *               message: "Alias Should Be Provided"
+ *       401:
+ *         description: |
+ *           Unauthorized. User needs to be authenticated using a valid Bearer token.
+ *       404:
+ *         description: |
+ *           URL not found. The provided alias does not exist.
+ *         content:
+ *           application/json:
+ *             example:
+ *               message: "URL not found"
+ *       500:
+ *         description: |
+ *           Internal server error. Something went wrong while processing the request.
+ *         content:
+ *           application/json:
+ *             example:
+ *               message: "Internal Server Error"
+ */
 
 //route to redirect to the original long url through alias and store necessary details...
 
@@ -429,22 +483,73 @@ router.get("/shorten/:alias", Auth, rateLimit(60, 60), async (req, res) => {
   return res.status(200).redirect(url.long_url);
 });
 
-//get analytics based on topics
-router.get("/analytics/:topic", rateLimit(60, 60), async (req, res) => {
-  const data = req.params.topic;
+/**
+ * @swagger
+ * /api/analytics/{alias}:
+ *   get:
+ *     summary: Get analytics for a specific short URL alias
+ *     description: |
+ *       This endpoint retrieves analytics data for a given short URL alias.
+ *       - The alias is used to fetch the analytics data, including click counts and other statistics.
+ *       - If no data is found for the alias, an appropriate error message is returned.
+ *     tags:
+ *       - URL Shortener
+ *     parameters:
+ *       - in: path
+ *         name: alias
+ *         required: true
+ *         description: The alias of the shortened URL whose analytics you want to retrieve.
+ *         schema:
+ *           type: string
+ *           example: "my-custom-alias"
+ *     responses:
+ *       200:
+ *         description: |
+ *           Successfully fetched analytics data for the given alias.
+ *           Returns a detailed report of clicks, users, devices, and other analytics.
+ *         content:
+ *           application/json:
+ *             example:
+ *               short_url: "https://short.ly/my-custom-alias"
+ *               total_clicks: 150
+ *               unique_users: 120
+ *               os_type:
+ *                 - os_name: "Windows"
+ *                   unique_clicks: 70
+ *                   unique_users: 50
+ *                 - os_name: "MacOS"
+ *                   unique_clicks: 30
+ *                   unique_users: 25
+ *               device_type:
+ *                 - device_name: "Desktop"
+ *                   unique_clicks: 100
+ *                   unique_users: 90
+ *                 - device_name: "Mobile"
+ *                   unique_clicks: 50
+ *                   unique_users: 40
+ *       400:
+ *         description: |
+ *           Bad request. The alias parameter must be provided in the path.
+ *         content:
+ *           application/json:
+ *             example:
+ *               message: "Alias Should Be Provided"
+ *       404:
+ *         description: |
+ *           URL not found. The provided alias does not exist in the analytics database.
+ *         content:
+ *           application/json:
+ *             example:
+ *               message: "URL not found"
+ *       500:
+ *         description: |
+ *           Internal server error. Something went wrong while processing the request.
+ *         content:
+ *           application/json:
+ *             example:
+ *               message: "Internal Server Error"
+ */
 
-  console.log(`Alias: ${data}`);
-
-  if (!data) {
-    return res.status(400).send("Alias Should Be Provided");
-  }
-
-  let url = await mongoFunctions.find_one("ANALYTICS", {
-    topic: data,
-  });
-
-  return res.status(200).send(url);
-});
 //get analytics based on alias
 router.get("/analytics/:alias", rateLimit(60, 60), async (req, res) => {
   const data = req.params.alias;
@@ -465,9 +570,146 @@ router.get("/analytics/:alias", rateLimit(60, 60), async (req, res) => {
 
   return res.status(200).send(url);
 });
+/**
+ * @swagger
+ * /api/analytics/{topic}:
+ *   get:
+ *     summary: Get analytics for a specific topic
+ *     description: |
+ *       This endpoint retrieves analytics data for a specific topic associated with a short URL.
+ *       - The topic parameter is used to fetch the analytics data related to a specific category or subject of URLs.
+ *       - If no data is found for the given topic, an empty result will be returned.
+ *     tags:
+ *       - URL Shortener
+ *     parameters:
+ *       - in: path
+ *         name: topic
+ *         required: true
+ *         description: The topic of the shortened URLs whose analytics you want to retrieve.
+ *         schema:
+ *           type: string
+ *           example: "Tech"
+ *     responses:
+ *       200:
+ *         description: |
+ *           Successfully fetched analytics data for the given topic.
+ *           Returns detailed analytics, including total clicks, unique users, and other statistics related to the topic.
+ *         content:
+ *           application/json:
+ *             example:
+ *               topic: "Tech"
+ *               total_clicks: 500
+ *               unique_users: 450
+ *               os_type:
+ *                 - os_name: "Windows"
+ *                   unique_clicks: 200
+ *                   unique_users: 180
+ *                 - os_name: "MacOS"
+ *                   unique_clicks: 150
+ *                   unique_users: 120
+ *               device_type:
+ *                 - device_name: "Desktop"
+ *                   unique_clicks: 350
+ *                   unique_users: 300
+ *                 - device_name: "Mobile"
+ *                   unique_clicks: 150
+ *                   unique_users: 130
+ *       400:
+ *         description: |
+ *           Bad request. The topic parameter must be provided in the path.
+ *         content:
+ *           application/json:
+ *             example:
+ *               message: "Alias Should Be Provided"
+ *       404:
+ *         description: |
+ *           Topic not found. The provided topic does not exist in the analytics database.
+ *         content:
+ *           application/json:
+ *             example:
+ *               message: "Topic not found"
+ *       500:
+ *         description: |
+ *           Internal server error. Something went wrong while processing the request.
+ *         content:
+ *           application/json:
+ *             example:
+ *               message: "Internal Server Error"
+ */
+
+//get analytics based on topics
+router.get("/analytics/:topic", rateLimit(60, 60), async (req, res) => {
+  const data = req.params.topic;
+
+  console.log(`Alias: ${data}`);
+
+  if (!data) {
+    return res.status(400).send("Alias Should Be Provided");
+  }
+
+  let url = await mongoFunctions.find_one("ANALYTICS", {
+    topic: data,
+  });
+
+  return res.status(200).send(url);
+});
+/**
+ * @swagger
+ * /api/analytics/overall:
+ *   get:
+ *     summary: Get overall analytics for the authenticated user
+ *     description: |
+ *       This endpoint retrieves the overall analytics data for the currently authenticated user.
+ *       - The analytics are fetched from the Redis cache first. If not found, the data will be retrieved from the database and stored in the Redis cache for future use, improving performance by reducing the load on the database.
+ *       - The caching mechanism in Redis helps speed up subsequent requests by serving data directly from memory.
+ *       - Requires authentication to access this route.
+ *     tags:
+ *       - URL Shortener
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: |
+ *           Successfully fetched the overall analytics for the authenticated user.
+ *           Returns detailed analytics data, including total clicks, unique users, and breakdowns for devices and OS types.
+ *           **Caching with Redis**: To improve performance, the system first checks Redis for cached data. If the data is not in Redis (cache miss), it queries the database and then stores the data in Redis for future use.
+ *         content:
+ *           application/json:
+ *             example:
+ *               user_id: "U123456789"
+ *               total_clicks: 1000
+ *               unique_users: 900
+ *               os_type:
+ *                 - os_name: "Windows"
+ *                   unique_clicks: 450
+ *                   unique_users: 400
+ *                 - os_name: "MacOS"
+ *                   unique_clicks: 350
+ *                   unique_users: 300
+ *               device_type:
+ *                 - device_name: "Desktop"
+ *                   unique_clicks: 700
+ *                   unique_users: 650
+ *                 - device_name: "Mobile"
+ *                   unique_clicks: 300
+ *                   unique_users: 250
+ *       401:
+ *         description: Unauthorized - User authentication is required to access this data.
+ *         content:
+ *           application/json:
+ *             example:
+ *               message: "Unauthorized"
+ *       500:
+ *         description: |
+ *           Internal server error. Something went wrong while processing the request.
+ *         content:
+ *           application/json:
+ *             example:
+ *               message: "Internal Server Error"
+ */
 
 //get all analytics
-router.get("/analytics", Auth, rateLimit(60, 60), async (req, res) => {
+router.get("/analytics/overall", Auth, rateLimit(60, 60), async (req, res) => {
   console.log("overall route hit");
   let url;
   url = await redisFunctions.redisGet("ANALYTICS", req.user.user_id);
