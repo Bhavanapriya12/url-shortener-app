@@ -31,15 +31,15 @@ module.exports = {
         console.log("update redis else------------>");
       }
     }
-    if (COLLECTION === "GAMES") {
+    if (COLLECTION === "ANALYTICS") {
       obj._id = undefined;
       obj.__v = undefined;
-      obj.createdAt = undefined;
+      // obj.createdAt = undefined;
       obj.updatedAt = undefined;
-      obj.players = undefined;
+      // obj.players = undefined;
       await client.hSet(
-        "GAMES_DETAILS",
-        "game",
+        "URL_ANALYTICS",
+        obj.user_id,
         JSON.stringify(obj),
         (err, res) => {}
       );

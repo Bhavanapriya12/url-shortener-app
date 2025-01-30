@@ -13,6 +13,7 @@ const { redisInsert } = require("../helpers/redis_functions");
 const rateLimit = require("../helpers/rate_limiter");
 const { Auth } = require("../middlewares/auth");
 const user_agent_parser = require("ua-parser-js");
+const { redis } = require("googleapis/build/src/apis/redis");
 
 const oauth2Client = new google.auth.OAuth2(
   process.env.CLIENT_ID,
@@ -30,6 +31,7 @@ router.post("/social_login", async (req, res) => {
   });
   return res.status(200).send({ data: authUrl });
 });
+//----------------callback route to redirect to our website after successfully signed up-------------------------
 
 router.get("/oauth_callback", async (req, res) => {
   console.log("query --->", req.query);
@@ -72,8 +74,8 @@ router.get("/oauth_callback", async (req, res) => {
           { expiresIn: "7d" }
         );
         console.log("token--->", token);
-        let fe_url = `http://localhost:8001/?token:${token}`;
-        return res.redirect(fe_url);
+        let redirect_url = `http://localhost:8001/?token:${token}`;
+        return res.redirect(redirect_url);
       }
     }
   }
@@ -81,7 +83,64 @@ router.get("/oauth_callback", async (req, res) => {
   return res.status(400).send("Try Again later..!");
 });
 
-//route to create short urls
+//---------------------documentation---------------------------
+
+/**
+ * @swagger
+ * /api/shorten:
+ *   post:
+ *     summary: Create a short URL
+ *     description: Generates a shortened URL for a given long URL. Requires authentication.
+ *     tags:
+ *       - URL Shortener
+ *     security:
+ *       - BearerAuth: []
+ *     requestBody:
+ *               longUrl:
+ *                 type: string
+ *                 description: The long URL to shorten.
+ *                 example: "https://example.com/some-long-url"
+ *               customAlias:
+ *                 type: string
+ *                 description: (Optional) Custom alias for the short URL.
+ *                 example: "my-custom-alias"
+ *               topic:
+ *                 type: string
+ *                 description: (Optional) Topic or category for the URL.
+ *                 example: "Tech"
+ *     responses:
+ *       200:
+ *         description: Shortened URL created successfully.
+ *         reponse:
+ *
+ *                 message:
+ *                   type: string
+ *                   example: "Created Shorten Url Successfully"
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *
+ *                     short_url:
+ *                       type: string
+ *                       example: "https://short.ly/my-custom-alias"
+ *
+ *                     createdAt:
+ *                       type: string
+ *                       format: date-time
+ *                       example: "2025-01-30T12:34:56.789Z"
+ *       400:
+ *         description: Validation error (e.g., missing required fields).
+ *         content:
+ *                 message:
+ *                   type: string
+ *                   example: "longUrl is required"
+ *       401:
+ *         description: Unauthorized - User authentication required.
+ *       500:
+ *         description: Internal Server Error.
+ */
+
+//route to create short urls by user
 
 router.post("/shorten", Auth, rateLimit(60, 60), async (req, res) => {
   let data = req.body;
@@ -101,14 +160,15 @@ router.post("/shorten", Auth, rateLimit(60, 60), async (req, res) => {
   };
 
   await mongoFunctions.create_new_record("ANALYTICS", analytics_object);
-  //   await redisFunctions.redisInsert(analytics_object);
+
+  await redisFunctions.update_redis("ANALYTICS", analytics_object);
   return res.status(200).send({
     message: "Created Shorten Url Successfully",
     data: analytics_object,
   });
 });
 
-//route to redirect to the original long url through alias
+//route to redirect to the original long url through alias and store necessary details...
 
 router.get("/shorten/:alias", Auth, rateLimit(60, 60), async (req, res) => {
   console.log(req.headers);
@@ -295,6 +355,7 @@ router.get("/shorten/:alias", Auth, rateLimit(60, 60), async (req, res) => {
     { returnDocument: "after" }
   );
   console.log(url);
+  await redisFunctions.update_redis("ANALYTICS", url);
 
   if (!url) {
     return res.status(404).send("URL not found");
@@ -341,11 +402,16 @@ router.get("/analytics/:alias", rateLimit(60, 60), async (req, res) => {
 });
 
 //get all analytics
-router.get("/analytics/overall", rateLimit(60, 60), async (req, res) => {
-  let url = await mongoFunctions.find_one("ANALYTICS", {});
+router.get("/analytics", Auth, rateLimit(60, 60), async (req, res) => {
+  console.log("overall route hit");
+  let url;
+  url = await redisFunctions.redisGet("ANALYTICS", req.user.user_id);
+
+  console.log(url);
 
   if (!url) {
-    return res.status(404).send("URL not found");
+    url = await mongoFunctions.find("ANALYTICS", { user_id: req.user.user_id });
+    await redisFunctions.update_redis("ANALYTICS", url);
   }
 
   return res.status(200).send(url);
