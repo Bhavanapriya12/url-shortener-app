@@ -109,6 +109,7 @@ router.post("/shorten", Auth, rateLimit(60, 60), async (req, res) => {
 });
 
 //route to redirect to the original long url through alias
+
 router.get("/shorten/:alias", Auth, rateLimit(60, 60), async (req, res) => {
   console.log(req.headers);
   const data = req.params.alias;
@@ -118,142 +119,183 @@ router.get("/shorten/:alias", Auth, rateLimit(60, 60), async (req, res) => {
 
   const user_agent = req.headers["user-agent"];
   const parsed_user_agent = user_agent_parser(user_agent);
-  const { user_id, username } = req.user;
-  const current_date = new Date().toISOString().split("T")[0];
+  const { user_id, email } = req.user;
 
-  // Find analytics data for the given short URL
-  const findAnalytics = await mongoFunctions.find_one("ANALYTICS", {
+  // Get the current date range (today)
+  let today = new Date();
+  let startDate = new Date(today.setHours(0, 0, 0, 0)); // Start of today (00:00:00)
+  let endDate = new Date(today.setHours(23, 59, 59, 999)); // End of today (23:59:59.999)
+
+  console.log("Start Date:", startDate);
+  console.log("End Date:", endDate);
+
+  // Find the analytics document with the alias and matching user clicks date
+  const findDate = await mongoFunctions.find("ANALYTICS", {
     short_url: data,
+    clicks_by_date: {
+      $elemMatch: {
+        date: { $gte: startDate, $lte: endDate },
+      },
+    },
+  });
+  console.log(findDate);
+
+  if (findDate.length > 0) {
+    // If the date exists, increment the clicks count
+    await mongoFunctions.find_one_and_update(
+      "ANALYTICS",
+      {
+        short_url: data,
+        "clicks_by_date.date": { $gte: startDate, $lte: endDate },
+      },
+      {
+        $inc: { "clicks_by_date.$.clicks_count": 1 },
+      },
+      { returnDocument: "after" }
+    );
+  } else {
+    // Otherwise, push a new date object with 1 click
+    await mongoFunctions.find_one_and_update(
+      "ANALYTICS",
+      { short_url: data },
+      {
+        $push: { clicks_by_date: { date: today, clicks_count: 1 } },
+      },
+      { returnDocument: "after" }
+    );
+  }
+
+  // If the user already exists, update the unique clicks for OS and Device
+  const findUser = await mongoFunctions.find("ANALYTICS", {
+    short_url: data,
+    users: { $elemMatch: { user_id: user_id } },
   });
 
-  let updateQuery = { $inc: { total_clicks: 1 } }; // Always increment total clicks
-  let updateOsQuery = {};
-  let updateDeviceQuery = {};
-  let updateDateQuery = {};
+  if (findUser.length > 0) {
+    // Update OS and Device information if the user exists
+    const findOs = await mongoFunctions.find("ANALYTICS", {
+      short_url: data,
+      os_type: { $elemMatch: { os_name: parsed_user_agent.os.name } },
+    });
 
-  if (findAnalytics) {
-    const userExists = findAnalytics.users.some((u) => u.user_id === user_id);
+    const findDevice = await mongoFunctions.find("ANALYTICS", {
+      short_url: data,
+      device_type: {
+        $elemMatch: { device_name: parsed_user_agent.device.name },
+      },
+    });
 
-    if (!userExists) {
-      // New user: increment unique clicks and add user
-      updateQuery.$inc.unique_clicks = 1;
-      updateQuery.$push = {
-        users: {
-          user_id,
-          username,
-          os_name: parsed_user_agent.os.name,
-          device_name: parsed_user_agent.device.vendor,
+    // For OS update, use arrayFilters to ensure proper element update
+    if (findOs.length > 0) {
+      await mongoFunctions.find_one_and_update(
+        "ANALYTICS",
+        { short_url: data },
+        {
+          $inc: { "os_type.$[elem].unique_clicks": 1 },
+          $set: { "os_type.$[elem].os_name": parsed_user_agent.os.name },
         },
-      };
+        {
+          arrayFilters: [{ "elem.os_name": parsed_user_agent.os.name }],
+          returnDocument: "after",
+        }
+      );
+    } else {
+      // If OS doesn't exist, push a new object to the os_type array
+      await mongoFunctions.find_one_and_update(
+        "ANALYTICS",
+        { short_url: data },
+        {
+          $push: {
+            os_type: {
+              os_name: parsed_user_agent.os.name,
+              unique_clicks: 1,
+              unique_users: 1,
+            },
+          },
+        },
+        { returnDocument: "after" }
+      );
     }
 
-    // OS Handling
-    const osIndex = findAnalytics.os_type.findIndex(
-      (os) => os.os_name === parsed_user_agent.os.name
-    );
-    if (osIndex !== -1) {
-      updateOsQuery = {
-        $inc: {
-          [`os_type.${osIndex}.unique_clicks`]: 1,
+    // For Device update, ensure unique clicks are incremented or new device is added
+    if (findDevice.length > 0) {
+      await mongoFunctions.find_one_and_update(
+        "ANALYTICS",
+        { short_url: data },
+        {
+          $inc: { "device_type.$[elem].unique_clicks": 1 },
+          $set: {
+            "device_type.$[elem].device_name": parsed_user_agent.device.name,
+          },
         },
-      };
-      if (!userExists) {
-        updateOsQuery.$inc[`os_type.${osIndex}.unique_users`] = 1;
-      }
+        {
+          arrayFilters: [{ "elem.device_name": parsed_user_agent.device.name }],
+          returnDocument: "after",
+        }
+      );
     } else {
-      updateOsQuery = {
+      await mongoFunctions.find_one_and_update(
+        "ANALYTICS",
+        { short_url: data },
+        {
+          $push: {
+            device_type: {
+              device_name: parsed_user_agent.device.name,
+              unique_clicks: 1,
+              unique_users: 1,
+            },
+          },
+        },
+        { returnDocument: "after" }
+      );
+    }
+  }
+
+  // If the user does not exist, create a new user entry and increment unique users
+  if (findUser.length < 1) {
+    console.log("New user detected, adding details.");
+    let s = await mongoFunctions.find_one_and_update(
+      "ANALYTICS",
+      { short_url: data },
+      {
+        $inc: { unique_users: 1 },
+        $push: {
+          users: {
+            user_id: user_id,
+            username: email,
+            os_name: parsed_user_agent.os.name,
+            device_name: parsed_user_agent.device.vendor,
+          },
+        },
         $push: {
           os_type: {
             os_name: parsed_user_agent.os.name,
             unique_clicks: 1,
-            unique_users: userExists ? 0 : 1,
+            unique_users: 1,
           },
-        },
-      };
-    }
-
-    // Device Handling
-    const deviceIndex = findAnalytics.device_type.findIndex(
-      (device) => device.device_name === parsed_user_agent.device.vendor
-    );
-    if (deviceIndex !== -1) {
-      updateDeviceQuery = {
-        $inc: {
-          [`device_type.${deviceIndex}.unique_clicks`]: 1,
-        },
-      };
-      if (!userExists) {
-        updateDeviceQuery.$inc[`device_type.${deviceIndex}.unique_users`] = 1;
-      }
-    } else {
-      updateDeviceQuery = {
-        $push: {
           device_type: {
-            device_name: parsed_user_agent.device.vendor,
+            device_name: parsed_user_agent.device.name,
             unique_clicks: 1,
-            unique_users: userExists ? 0 : 1,
+            unique_users: 1,
           },
         },
-      };
-    }
-
-    // Clicks by Date Handling
-    const dateIndex = findAnalytics.clicks_by_date.findIndex(
-      (click) => click.date === current_date
-    );
-    if (dateIndex !== -1) {
-      updateDateQuery = {
-        $inc: { [`clicks_by_date.${dateIndex}.clicks`]: 1 },
-      };
-    } else {
-      updateDateQuery = {
-        $push: { clicks_by_date: { date: current_date, clicks: 1 } },
-      };
-    }
-  } else {
-    // First-time entry for this short URL
-    updateQuery = {
-      $inc: { total_clicks: 1, unique_clicks: 1 },
-      $push: {
-        users: {
-          user_id,
-          username,
-          os_name: parsed_user_agent.os.name,
-          device_name: parsed_user_agent.device.vendor,
-        },
-        os_type: {
-          os_name: parsed_user_agent.os.name,
-          unique_clicks: 1,
-          unique_users: 1,
-        },
-        device_type: {
-          device_name: parsed_user_agent.device.vendor,
-          unique_clicks: 1,
-          unique_users: 1,
-        },
-        clicks_by_date: { date: current_date, clicks: 1 },
       },
-    };
+      {},
+      { returnDocument: "after" }
+    );
+    console.log(s);
   }
 
-  // Merge all updates
-  updateQuery = {
-    ...updateQuery,
-    ...updateOsQuery,
-    ...updateDeviceQuery,
-    ...updateDateQuery,
-  };
-
-  // Perform the update in MongoDB
-  await mongoFunctions.find_one_and_update(
+  // Find the updated analytics data for the given short URL
+  const url = await mongoFunctions.find_one_and_update(
     "ANALYTICS",
     { short_url: data },
-    updateQuery,
+    { $inc: { total_clicks: 1 } },
+    {},
     { returnDocument: "after" }
   );
+  console.log(url);
 
-  // Fetch the updated URL data to redirect the user
-  const url = await mongoFunctions.find_one("ANALYTICS", { short_url: data });
   if (!url) {
     return res.status(404).send("URL not found");
   }
@@ -293,20 +335,13 @@ router.get("/analytics/:alias", rateLimit(60, 60), async (req, res) => {
   if (!url) {
     return res.status(404).send("URL not found");
   }
+  console.log(url);
 
   return res.status(200).send(url);
 });
 
 //get all analytics
 router.get("/analytics/overall", rateLimit(60, 60), async (req, res) => {
-  const data = req.params.topic;
-
-  console.log(`Alias: ${data}`);
-
-  if (!data) {
-    return res.status(400).send("Alias Should Be Provided");
-  }
-
   let url = await mongoFunctions.find_one("ANALYTICS", {});
 
   if (!url) {

@@ -11,7 +11,7 @@ const analytics_schema = new mongoose.Schema(
     clicks_by_date: [
       {
         date: Date,
-        click_count: Number,
+        clicks_count: Number,
       },
     ],
     os_type: [
