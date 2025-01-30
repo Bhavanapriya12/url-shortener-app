@@ -1,7 +1,7 @@
 const { nanoid } = require("nanoid");
 const crypto = require("crypto");
 
-function shortenUrl(longUrl) {
+function shortenUrl() {
   // Generate a unique short URL
   const shortUrl = nanoid(6);
   return shortUrl;

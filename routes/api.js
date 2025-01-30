@@ -70,6 +70,8 @@ router.post("/social_login", async (req, res) => {
  *       - If the user **already exists**, they are simply **logged in**.
  *       - A **JWT token** is created for the user, which can be used to access protected routes.
  *       - Finally, the user is redirected to the API documentation with the token in the URL.
+ *       -Copy the token which is there in the query params with name token after redirection
+ *       -Paste it in the Authorisation section to access the protected routes
  *     tags:
  *       - Authentication
  *     parameters:
@@ -213,17 +215,25 @@ router.post("/shorten", Auth, rateLimit(60, 60), async (req, res) => {
   const { error } = validations.create_shorten_url(data);
   if (error) return res.status(400).send(error.details[0].message);
 
+  let findShort = await mongoFunctions.find_one("ANALYTICS", {
+    short_url: data.myCustomAlias,
+  });
+
+  if (findShort) {
+    return res.status(400).send("This Custom Alias Is Already Exists");
+  }
   let analytics_object = {
     user_id: req.user.user_id,
-    short_url: data.customAlias
-      ? data.customAlias
-      : functions.shortenUrl(data.longUrl),
+    short_url: data.customAlias ? data.customAlias : functions.shortenUrl(),
     long_url: data.longUrl,
     topic: data.topic ? data.topic : "",
     createdAt: new Date(),
   };
 
-  await mongoFunctions.create_new_record("ANALYTICS", analytics_object);
+  await mongoFunctions.create_new_record("ANALYTICS", {
+    short_url: analytics_object.short_url,
+    createdAt: analytics_object.createdAt,
+  });
 
   await redisFunctions.update_redis("ANALYTICS", analytics_object);
   return res.status(200).send({
@@ -241,6 +251,7 @@ router.post("/shorten", Auth, rateLimit(60, 60), async (req, res) => {
  *       - The alias is used to find the shortened URL in the database.
  *       - The number of clicks for the alias is tracked, and the user's device and OS information are logged for analytics.
  *       - This route also tracks the unique clicks per user, device, and operating system (OS).
+ *       - Here redirecting to the original url is not supporting..But I have tested it by integrating with frontend ..The redirection is successfully done and properly working..Here it is not redirecting from swagger UI..
  *     tags:
  *       - URL Shortener
  *     security:
@@ -290,134 +301,171 @@ router.post("/shorten", Auth, rateLimit(60, 60), async (req, res) => {
 //route to redirect to the original long url through alias and store necessary details...
 
 router.get("/shorten/:alias", Auth, rateLimit(60, 60), async (req, res) => {
-  console.log(req.headers);
-  const data = req.params.alias;
-  if (!data) {
-    return res.status(400).send("Alias Should Be Provided");
-  }
+  try {
+    console.log(req.headers);
+    const data = req.params.alias;
+    if (!data) {
+      return res.status(400).send("Alias Should Be Provided");
+    }
 
-  const user_agent = req.headers["user-agent"];
-  const parsed_user_agent = user_agent_parser(user_agent);
-  const { user_id, email } = req.user;
+    const user_agent = req.headers["user-agent"];
+    const parsed_user_agent = user_agent_parser(user_agent);
+    const { user_id, email } = req.user;
 
-  // Get the current date range (today)
-  let today = new Date();
-  let startDate = new Date(today.setHours(0, 0, 0, 0)); // Start of today (00:00:00)
-  let endDate = new Date(today.setHours(23, 59, 59, 999)); // End of today (23:59:59.999)
+    // Get the current date range (today)
+    let today = new Date();
+    let startDate = new Date(today.setHours(0, 0, 0, 0)); // Start of today (00:00:00)
+    let endDate = new Date(today.setHours(23, 59, 59, 999)); // End of today (23:59:59.999)
 
-  console.log("Start Date:", startDate);
-  console.log("End Date:", endDate);
+    console.log("Start Date:", startDate);
+    console.log("End Date:", endDate);
 
-  // Find the analytics document with the alias and matching user clicks date
-  const findDate = await mongoFunctions.find("ANALYTICS", {
-    short_url: data,
-    clicks_by_date: {
-      $elemMatch: {
-        date: { $gte: startDate, $lte: endDate },
-      },
-    },
-  });
-  console.log(findDate);
-
-  if (findDate.length > 0) {
-    // If the date exists, increment the clicks count
-    await mongoFunctions.find_one_and_update(
-      "ANALYTICS",
-      {
-        short_url: data,
-        "clicks_by_date.date": { $gte: startDate, $lte: endDate },
-      },
-      {
-        $inc: { "clicks_by_date.$.clicks_count": 1 },
-      },
-      { returnDocument: "after" }
-    );
-  } else {
-    // Otherwise, push a new date object with 1 click
-    await mongoFunctions.find_one_and_update(
-      "ANALYTICS",
-      { short_url: data },
-      {
-        $push: { clicks_by_date: { date: today, clicks_count: 1 } },
-      },
-      { returnDocument: "after" }
-    );
-  }
-
-  // If the user already exists, update the unique clicks for OS and Device
-  const findUser = await mongoFunctions.find("ANALYTICS", {
-    short_url: data,
-    users: { $elemMatch: { user_id: user_id } },
-  });
-
-  if (findUser.length > 0) {
-    // Update OS and Device information if the user exists
-    const findOs = await mongoFunctions.find("ANALYTICS", {
+    // Find the analytics document with the alias and matching user clicks date
+    const findDate = await mongoFunctions.find("ANALYTICS", {
       short_url: data,
-      os_type: { $elemMatch: { os_name: parsed_user_agent.os.name } },
-    });
-
-    const findDevice = await mongoFunctions.find("ANALYTICS", {
-      short_url: data,
-      device_type: {
-        $elemMatch: { device_name: parsed_user_agent.device.name },
+      clicks_by_date: {
+        $elemMatch: {
+          date: { $gte: startDate, $lte: endDate },
+        },
       },
     });
+    console.log(findDate);
 
-    // For OS update, use arrayFilters to ensure proper element update
-    if (findOs.length > 0) {
+    if (findDate.length > 0) {
+      // If the date exists, increment the clicks count
       await mongoFunctions.find_one_and_update(
         "ANALYTICS",
-        { short_url: data },
         {
-          $inc: { "os_type.$[elem].unique_clicks": 1 },
-          $set: { "os_type.$[elem].os_name": parsed_user_agent.os.name },
+          short_url: data,
+          "clicks_by_date.date": { $gte: startDate, $lte: endDate },
         },
         {
-          arrayFilters: [{ "elem.os_name": parsed_user_agent.os.name }],
-          returnDocument: "after",
-        }
+          $inc: { "clicks_by_date.$.clicks_count": 1 },
+        },
+        { returnDocument: "after" }
       );
     } else {
-      // If OS doesn't exist, push a new object to the os_type array
+      // Otherwise, push a new date object with 1 click
       await mongoFunctions.find_one_and_update(
         "ANALYTICS",
         { short_url: data },
         {
+          $push: { clicks_by_date: { date: today, clicks_count: 1 } },
+        },
+        { returnDocument: "after" }
+      );
+    }
+
+    // If the user already exists, update the unique clicks for OS and Device
+    const findUser = await mongoFunctions.find("ANALYTICS", {
+      short_url: data,
+      users: { $elemMatch: { user_id: user_id } },
+    });
+
+    if (findUser.length > 0) {
+      // Update OS and Device information if the user exists
+      const findOs = await mongoFunctions.find("ANALYTICS", {
+        short_url: data,
+        os_type: { $elemMatch: { os_name: parsed_user_agent.os.name } },
+      });
+
+      const findDevice = await mongoFunctions.find("ANALYTICS", {
+        short_url: data,
+        device_type: {
+          $elemMatch: { device_name: parsed_user_agent.device.name },
+        },
+      });
+
+      // For OS update, use arrayFilters to ensure proper element update
+      if (findOs.length > 0) {
+        await mongoFunctions.find_one_and_update(
+          "ANALYTICS",
+          { short_url: data },
+          {
+            $inc: { "os_type.$[elem].unique_clicks": 1 },
+            $set: { "os_type.$[elem].os_name": parsed_user_agent.os.name },
+          },
+          {
+            arrayFilters: [{ "elem.os_name": parsed_user_agent.os.name }],
+            returnDocument: "after",
+          }
+        );
+      } else {
+        // If OS doesn't exist, push a new object to the os_type array
+        await mongoFunctions.find_one_and_update(
+          "ANALYTICS",
+          { short_url: data },
+          {
+            $push: {
+              os_type: {
+                os_name: parsed_user_agent.os.name,
+                unique_clicks: 1,
+                unique_users: 1,
+              },
+            },
+          },
+          { returnDocument: "after" }
+        );
+      }
+
+      // For Device update, ensure unique clicks are incremented or new device is added
+      if (findDevice.length > 0) {
+        await mongoFunctions.find_one_and_update(
+          "ANALYTICS",
+          { short_url: data },
+          {
+            $inc: { "device_type.$[elem].unique_clicks": 1 },
+            $set: {
+              "device_type.$[elem].device_name": parsed_user_agent.device.name,
+            },
+          },
+          {
+            arrayFilters: [
+              { "elem.device_name": parsed_user_agent.device.name },
+            ],
+            returnDocument: "after",
+          }
+        );
+      } else {
+        await mongoFunctions.find_one_and_update(
+          "ANALYTICS",
+          { short_url: data },
+          {
+            $push: {
+              device_type: {
+                device_name: parsed_user_agent.device.name,
+                unique_clicks: 1,
+                unique_users: 1,
+              },
+            },
+          },
+          { returnDocument: "after" }
+        );
+      }
+    }
+
+    // If the user does not exist, create a new user entry and increment unique users
+    if (findUser.length < 1) {
+      console.log("New user detected, adding details.");
+      let s = await mongoFunctions.find_one_and_update(
+        "ANALYTICS",
+        { short_url: data },
+        {
+          $inc: { unique_users: 1 },
+          $push: {
+            users: {
+              user_id: user_id,
+              username: email,
+              os_name: parsed_user_agent.os.name,
+              device_name: parsed_user_agent.device.vendor,
+            },
+          },
           $push: {
             os_type: {
               os_name: parsed_user_agent.os.name,
               unique_clicks: 1,
               unique_users: 1,
             },
-          },
-        },
-        { returnDocument: "after" }
-      );
-    }
-
-    // For Device update, ensure unique clicks are incremented or new device is added
-    if (findDevice.length > 0) {
-      await mongoFunctions.find_one_and_update(
-        "ANALYTICS",
-        { short_url: data },
-        {
-          $inc: { "device_type.$[elem].unique_clicks": 1 },
-          $set: {
-            "device_type.$[elem].device_name": parsed_user_agent.device.name,
-          },
-        },
-        {
-          arrayFilters: [{ "elem.device_name": parsed_user_agent.device.name }],
-          returnDocument: "after",
-        }
-      );
-    } else {
-      await mongoFunctions.find_one_and_update(
-        "ANALYTICS",
-        { short_url: data },
-        {
-          $push: {
             device_type: {
               device_name: parsed_user_agent.device.name,
               unique_clicks: 1,
@@ -425,62 +473,32 @@ router.get("/shorten/:alias", Auth, rateLimit(60, 60), async (req, res) => {
             },
           },
         },
+        {},
         { returnDocument: "after" }
       );
+      console.log(s);
     }
-  }
 
-  // If the user does not exist, create a new user entry and increment unique users
-  if (findUser.length < 1) {
-    console.log("New user detected, adding details.");
-    let s = await mongoFunctions.find_one_and_update(
+    // Find the updated analytics data for the given short URL
+    const url = await mongoFunctions.find_one_and_update(
       "ANALYTICS",
       { short_url: data },
-      {
-        $inc: { unique_users: 1 },
-        $push: {
-          users: {
-            user_id: user_id,
-            username: email,
-            os_name: parsed_user_agent.os.name,
-            device_name: parsed_user_agent.device.vendor,
-          },
-        },
-        $push: {
-          os_type: {
-            os_name: parsed_user_agent.os.name,
-            unique_clicks: 1,
-            unique_users: 1,
-          },
-          device_type: {
-            device_name: parsed_user_agent.device.name,
-            unique_clicks: 1,
-            unique_users: 1,
-          },
-        },
-      },
+      { $inc: { total_clicks: 1 } },
       {},
       { returnDocument: "after" }
     );
-    console.log(s);
+    console.log(url);
+    await redisFunctions.update_redis("ANALYTICS", url);
+
+    if (!url) {
+      return res.status(404).send("URL not found");
+    }
+
+    return res.status(200).redirect(url.long_url);
+  } catch (error) {
+    console.error("Error occurred while processing request:", error);
+    return res.status(500).send("Internal Server Error");
   }
-
-  // Find the updated analytics data for the given short URL
-  const url = await mongoFunctions.find_one_and_update(
-    "ANALYTICS",
-    { short_url: data },
-    { $inc: { total_clicks: 1 } },
-    {},
-    { returnDocument: "after" }
-  );
-  console.log(url);
-  await redisFunctions.update_redis("ANALYTICS", url);
-
-  if (!url) {
-    return res.status(404).send("URL not found");
-  }
-
-  return res.status(200).redirect(url.long_url);
 });
 
 /**
@@ -511,22 +529,23 @@ router.get("/shorten/:alias", Auth, rateLimit(60, 60), async (req, res) => {
  *           application/json:
  *             example:
  *               short_url: "https://short.ly/my-custom-alias"
- *               total_clicks: 150
- *               unique_users: 120
+ *               total_clicks: 7
+ *               unique_users: 7
+ *               clicks_by_date: []
  *               os_type:
  *                 - os_name: "Windows"
- *                   unique_clicks: 70
- *                   unique_users: 50
+ *                   unique_clicks: 4
+ *                   unique_users: 3
  *                 - os_name: "MacOS"
- *                   unique_clicks: 30
- *                   unique_users: 25
+ *                   unique_clicks: 2
+ *                   unique_users: 2
  *               device_type:
  *                 - device_name: "Desktop"
- *                   unique_clicks: 100
- *                   unique_users: 90
+ *                   unique_clicks: 5
+ *                   unique_users: 4
  *                 - device_name: "Mobile"
- *                   unique_clicks: 50
- *                   unique_users: 40
+ *                   unique_clicks: 2
+ *                   unique_users: 2
  *       400:
  *         description: |
  *           Bad request. The alias parameter must be provided in the path.
@@ -551,25 +570,34 @@ router.get("/shorten/:alias", Auth, rateLimit(60, 60), async (req, res) => {
  */
 
 //get analytics based on alias
-router.get("/analytics/:alias", rateLimit(60, 60), async (req, res) => {
-  const data = req.params.alias;
+router.get("/analytics/alias/:alias", rateLimit(60, 60), async (req, res) => {
+  try {
+    const data = req.params.alias;
 
-  console.log(`Alias: ${data}`);
+    console.log(`Alias: ${data}`);
 
-  if (!data) {
-    return res.status(400).send("Alias Should Be Provided");
+    if (!data) {
+      return res.status(400).send("Alias Should Be Provided");
+    }
+
+    // Match the alias
+    let alias = await mongoFunctions.find_one("ANALYTICS", {
+      short_url: data,
+    });
+
+    if (!alias) {
+      return res.status(404).send("Alias not found");
+    }
+
+    console.log(alias);
+
+    return res.status(200).send(alias);
+  } catch (error) {
+    console.error("Error fetching alias analytics:", error);
+    return res.status(500).send("Internal Server Error");
   }
-  let url = await mongoFunctions.find_one("ANALYTICS", {
-    short_url: data,
-  });
-
-  if (!url) {
-    return res.status(404).send("URL not found");
-  }
-  console.log(url);
-
-  return res.status(200).send(url);
 });
+
 /**
  * @swagger
  * /api/analytics/{topic}:
@@ -597,30 +625,32 @@ router.get("/analytics/:alias", rateLimit(60, 60), async (req, res) => {
  *         content:
  *           application/json:
  *             example:
- *               topic: "Tech"
- *               total_clicks: 500
- *               unique_users: 450
- *               os_type:
- *                 - os_name: "Windows"
- *                   unique_clicks: 200
- *                   unique_users: 180
- *                 - os_name: "MacOS"
- *                   unique_clicks: 150
- *                   unique_users: 120
- *               device_type:
- *                 - device_name: "Desktop"
- *                   unique_clicks: 350
- *                   unique_users: 300
- *                 - device_name: "Mobile"
- *                   unique_clicks: 150
- *                   unique_users: 130
+ *               totalClicks: 7
+ *               uniqueUsers: 7
+ *               clicksByDate: []
+ *               urls:
+ *                 - shortUrl: "my-custom-alias"
+ *                   totalClicks: 4
+ *                   uniqueUsers: 4
+ *                 - shortUrl: "my-custom-alias"
+ *                   totalClicks: 0
+ *                   uniqueUsers: 0
+ *                 - shortUrl: "my-custom-alias"
+ *                   totalClicks: 0
+ *                   uniqueUsers: 0
+ *                 - shortUrl: "my-custom"
+ *                   totalClicks: 3
+ *                   uniqueUsers: 3
+ *                 - shortUrl: "my-custom"
+ *                   totalClicks: 0
+ *                   uniqueUsers: 0
  *       400:
  *         description: |
  *           Bad request. The topic parameter must be provided in the path.
  *         content:
  *           application/json:
  *             example:
- *               message: "Alias Should Be Provided"
+ *               message: "Topic should be provided"
  *       404:
  *         description: |
  *           Topic not found. The provided topic does not exist in the analytics database.
@@ -638,21 +668,51 @@ router.get("/analytics/:alias", rateLimit(60, 60), async (req, res) => {
  */
 
 //get analytics based on topics
-router.get("/analytics/:topic", rateLimit(60, 60), async (req, res) => {
-  const data = req.params.topic;
+router.get("/analytics/topic/:topic", rateLimit(60, 60), async (req, res) => {
+  try {
+    const data = req.params.topic;
 
-  console.log(`Alias: ${data}`);
+    if (!data) {
+      return res.status(400).send("Topic should be provided");
+    }
+    //find topic in db
+    let topic = await mongoFunctions.find("ANALYTICS", {
+      topic: data,
+    });
 
-  if (!data) {
-    return res.status(400).send("Alias Should Be Provided");
+    if (!topic) {
+      return res.status(404).send("Topic not found");
+    }
+    // Calculate total clicks by summing up the total_clicks from all URLs
+    const total_clicks = topic.reduce(
+      (sum, url) => sum + (url.total_clicks || 0),
+      0
+    );
+    const unique_users = topic.reduce(
+      (sum, url) => sum + (url.unique_users || 0),
+      0
+    );
+
+    // Required response
+    const response = {
+      totalClicks: total_clicks, // Sum of all total_clicks in the URLs array
+      uniqueUsers: unique_users, // Unique users for the topic
+      clicksByDate: topic.clicks_by_date || [], // Clicks count by date for the topic
+      urls:
+        topic.map((url) => ({
+          shortUrl: url.short_url, // Short URL
+          totalClicks: url.total_clicks || 0, // Total clicks for the specific URL
+          uniqueUsers: url.unique_users || 0, // Unique users for the specific URL
+        })) || [], // Array of URLs under the topic
+    };
+
+    return res.status(200).send(response);
+  } catch (error) {
+    console.error("Error fetching analytics:", error);
+    return res.status(500).send("Internal Server Error");
   }
-
-  let url = await mongoFunctions.find_one("ANALYTICS", {
-    topic: data,
-  });
-
-  return res.status(200).send(url);
 });
+
 /**
  * @swagger
  * /api/analytics/overall:
@@ -677,8 +737,16 @@ router.get("/analytics/:topic", rateLimit(60, 60), async (req, res) => {
  *           application/json:
  *             example:
  *               user_id: "U123456789"
+ *               total_urls: 5
  *               total_clicks: 1000
  *               unique_users: 900
+ *               clicks_by_date:
+ *                 - date: "2025-01-28"
+ *                   clicks_count: 300
+ *                 - date: "2025-01-29"
+ *                   clicks_count: 400
+ *                 - date: "2025-01-30"
+ *                   clicks_count: 300
  *               os_type:
  *                 - os_name: "Windows"
  *                   unique_clicks: 450
@@ -710,18 +778,49 @@ router.get("/analytics/:topic", rateLimit(60, 60), async (req, res) => {
 
 //get all analytics
 router.get("/analytics/overall", Auth, rateLimit(60, 60), async (req, res) => {
-  console.log("overall route hit");
-  let url;
-  url = await redisFunctions.redisGet("ANALYTICS", req.user.user_id);
+  console.log("Overall analytics route hit");
 
-  console.log(url);
+  try {
+    //Get data from redis for better performance
+    let overall_data = await redisFunctions.redisGet(
+      "URL_ANALYTICS",
+      req.user.user_id,
+      true
+    );
 
-  if (!url) {
-    url = await mongoFunctions.find("ANALYTICS", { user_id: req.user.user_id });
-    await redisFunctions.update_redis("ANALYTICS", url);
+    //Handle the case if no data or data cleaned up from redis by any chance...get data from db
+
+    if (!overall_data) {
+      overall_data = await mongoFunctions.find(
+        "ANALYTICS",
+        {
+          user_id: req.user.user_id,
+        },
+        {},
+        {},
+        {
+          user_id: 1,
+          total_clicks: 1,
+          unique_users: 1,
+          os_type: 1,
+          device_type: 1,
+          clicks_by_date: 1,
+        }
+      );
+    }
+    if (!Array.isArray(overall_data)) {
+      overall_data = [overall_data]; // Wrap it in an array if it's not already
+    }
+    overall_data = overall_data.map((item) => ({
+      ...item,
+      total_urls: overall_data.length, // Add total URLs count to each entry
+    }));
+
+    return res.status(200).send(overall_data);
+  } catch (error) {
+    console.error("Error fetching analytics:", error);
+    return res.status(500).json({ message: "Internal Server Error" });
   }
-
-  return res.status(200).send(url);
 });
 
 module.exports = router;
