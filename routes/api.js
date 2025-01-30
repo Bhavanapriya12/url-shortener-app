@@ -21,6 +21,30 @@ const oauth2Client = new google.auth.OAuth2(
   "https://url-shortener-app-zv5u.onrender.com/api/oauth_callback"
 );
 //-------------------Google signin-----------
+/**
+ * @swagger
+ * /api/social_login:
+ *   post:
+ *     summary: Generate Google OAuth2 login URL
+ *     description: Returns a Google authentication URL to initiate OAuth2 login.
+ *     tags:
+ *       - Authentication
+ *     responses:
+ *       200:
+ *         description: Successfully generated Google OAuth2 login URL.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   type: string
+ *                   description: Google authentication URL.
+ *                   example: "https://accounts.google.com/o/oauth2/auth?client_id=..."
+ *       500:
+ *         description: Internal Server Error.
+ */
+
 router.post("/social_login", async (req, res) => {
   const authUrl = oauth2Client.generateAuthUrl({
     access_type: "offline",
@@ -32,6 +56,55 @@ router.post("/social_login", async (req, res) => {
   return res.status(200).send({ data: authUrl });
 });
 //----------------callback route to redirect to our website after successfully signed up-------------------------
+
+/**
+ * @swagger
+ * /api/oauth_callback:
+ *   get:
+ *     summary: Google Login Callback (Sign Up / Sign In)
+ *     description: |
+ *       This is the callback route for Google Login.  
+ *       - When a user logs in using Google, they are sent back to this route with a special **code**.  
+ *       - The server uses this code to get the user's Google profile (name, email, etc.).  
+ *       - If the user is **new**, they are automatically **registered** in the database.  
+ *       - If the user **already exists**, they are simply **logged in**.  
+ *       - A **JWT token** is created for the user, which can be used to access protected routes.  
+ *       - Finally, the user is redirected to the API documentation with the token in the URL.
+ *     tags:
+ *       - Authentication
+ *     parameters:
+ *       - in: query
+ *         name: code
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: |
+ *           A special code given by Google after a user logs in.  
+ *           The server exchanges this code for an access token to get user details.
+ *     responses:
+ *       302:
+ *         description: |
+ *           Login or registration successful!  
+ *           The user is redirected to the API documentation with a JWT token.
+ *         headers:
+ *           Location:
+ *             schema:
+ *               type: string
+ *               example: "https://url-shortener-app-zv5u.onrender.com/api-docs/?token=your-jwt-token"
+ *       400:
+ *         description: |
+ *           Something went wrong! The code may be expired or invalid.  
+ *           Try logging in again.
+ *       500:
+ *         description: |
+ *           Internal Server Error!  
+ *           Something went wrong on our end. Please try again later or contact support.
+ *         content:
+ *           application/json:
+ *             example:
+ *               message: "Internal Server Error"
+ */
+
 
 router.get("/oauth_callback", async (req, res) => {
   console.log("query --->", req.query);
