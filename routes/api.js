@@ -244,7 +244,7 @@ router.post("/shorten", Auth, rateLimit(60, 60), async (req, res) => {
  *     tags:
  *       - URL Shortener
  *     security:
- *       - BearerAuth: []
+ *       - ApiKeyAuth: []  # This should match the security scheme defined in swaggerDefinition
  *     parameters:
  *       - in: path
  *         name: alias
@@ -666,7 +666,7 @@ router.get("/analytics/:topic", rateLimit(60, 60), async (req, res) => {
  *     tags:
  *       - URL Shortener
  *     security:
- *       - BearerAuth: []
+ *       - ApiKeyAuth: []  # This should match the security scheme defined in swaggerDefinition
  *     responses:
  *       200:
  *         description: |
