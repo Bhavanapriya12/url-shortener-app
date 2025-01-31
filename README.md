@@ -29,7 +29,7 @@ API Implementation: All required APIs for URL shortening and analytics are imple
 
 Authenticated Routes: Custom rate limiter allowing 1 request per second to prevent brute-force attacks.
 
-Global Rate Limiter: Additional security to prevent excessive requests.
+Global Rate Limiter: Additional security to prevent excessive requests for no auth routes.
 
 Authentication: Secure Google Sign-In/Sign-Up authentication system.
 
