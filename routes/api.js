@@ -642,7 +642,7 @@ router.get("/shorten/:alias", Auth, rateLimit(60, 60), async (req, res) => {
  */
 
 //get analytics based on alias
-router.get("/analytics/alias/:alias", rateLimit(60, 60), async (req, res) => {
+router.get("/analytics/alias/:alias", async (req, res) => {
   try {
     const data = req.params.alias;
 
@@ -740,7 +740,7 @@ router.get("/analytics/alias/:alias", rateLimit(60, 60), async (req, res) => {
  */
 
 //get analytics based on topics
-router.get("/analytics/topic/:topic", rateLimit(60, 60), async (req, res) => {
+router.get("/analytics/topic/:topic", async (req, res) => {
   try {
     const data = req.params.topic;
 
