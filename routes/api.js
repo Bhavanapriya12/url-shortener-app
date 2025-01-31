@@ -24,7 +24,10 @@ const oauth2Client = new google.auth.OAuth2(
  * /api/social_login:
  *   post:
  *     summary: Generate Google OAuth2 login URL
- *     description: Returns a Google authentication URL to initiate OAuth2 login.
+ *     description: Returns a Google authentication URL to initiate OAuth2 login.A link will be generated in the response..
+ *                  -Copy that link and paste it in the browser..You will redirect to the google sign in form..Continue with the steps and you will redirect back to the swagger ui after completion of signup process with google.
+ *                  -After redirecting,you will get token in the query params use that token later to access protected routes.
+ *
  *     tags:
  *       - Authentication
  *     responses:
