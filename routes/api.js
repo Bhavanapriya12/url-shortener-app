@@ -380,6 +380,7 @@ router.get("/shorten/:alias", Auth, rateLimit(60, 60), async (req, res) => {
           $elemMatch: { device_name: parsed_user_agent.device.name },
         },
       });
+      console.log("findOsData-------", findOsData);
 
       // For OS update, use arrayFilters to ensure proper element update
       if (findOs.length === 0 && findOsData.length > 0) {
@@ -395,22 +396,25 @@ router.get("/shorten/:alias", Auth, rateLimit(60, 60), async (req, res) => {
             returnDocument: "after",
           }
         );
-      } else {
-        // If OS doesn't exist, push a new object to the os_type array
-        await mongoFunctions.find_one_and_update(
-          "ANALYTICS",
-          { short_url: data },
-          {
-            $push: {
-              os_type: {
-                os_name: parsed_user_agent.os.name,
-                unique_clicks: 1,
-                unique_users: 1,
+      }
+      if (findOs.length === 0 && findOsData.length === 0) {
+        {
+          // If OS doesn't exist, push a new object to the os_type array
+          await mongoFunctions.find_one_and_update(
+            "ANALYTICS",
+            { short_url: data },
+            {
+              $push: {
+                os_type: {
+                  os_name: parsed_user_agent.os.name,
+                  unique_clicks: 1,
+                  unique_users: 1,
+                },
               },
             },
-          },
-          { returnDocument: "after" }
-        );
+            { returnDocument: "after" }
+          );
+        }
       }
 
       // For Device update, ensure unique clicks are incremented or new device is added
@@ -431,7 +435,8 @@ router.get("/shorten/:alias", Auth, rateLimit(60, 60), async (req, res) => {
             returnDocument: "after",
           }
         );
-      } else {
+      }
+      if (findDevice.length === 0 && findDeviceData.length === 0) {
         await mongoFunctions.find_one_and_update(
           "ANALYTICS",
           { short_url: data },
@@ -452,6 +457,7 @@ router.get("/shorten/:alias", Auth, rateLimit(60, 60), async (req, res) => {
     // If the user does not exist, create a new user entry and increment unique users
     if (findUser.length < 1) {
       console.log("New user detected, adding details.");
+      console.log(findOsData);
       if (findOsData.length > 0) {
         await mongoFunctions.find_one_and_update(
           "ANALYTICS",
