@@ -65,6 +65,8 @@ router.post("/social_login", async (req, res) => {
  *     summary: Google Login Callback (Sign Up / Sign In)
  *     description: |
  *       This is the callback route for Google Login.
+ *       - You need not hit this route.Google itself hit this callback route and give us token in query params whenever 
+ *         we paste the link which came as response in the above route
  *       - When a user logs in using Google, they are sent back to this route with a special **code**.
  *       - The server uses this code to get the user's Google profile (name, email, etc.).
  *       - If the user is **new**, they are automatically **registered** in the database.
