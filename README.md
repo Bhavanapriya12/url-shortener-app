@@ -1,17 +1,92 @@
-Deployed render link----->https://url-shortener-app-zv5u.onrender.com
-Api docs for our url-shortener-app--------->https://url-shortener-app-zv5u.onrender.com/api-docs
+Deployed Application
 
-//Instructions to run the project
+**Live URL**: https://url-shortener-app-zv5u.onrender.com
 
--->Clone the repositary
---->npm install
----->node app.js
+**API Documentation**: https://url-shortener-app-zv5u.onrender.com/api-docs
 
-//Overview of the Url-Shortener-Project
-Implemented all the mentioned apis in the project...Implemented rate limiters to allow 1 req per 1 second for authenticated apis..this should make our project to secure and save our project from brute foprce attacjs and so many attacks....and added secure google sign in/signup authentication
-and proper redirection to our swagger ui[api docs]..
-Used mongo db and written mongodb functions in a mongofunctions.js file in helpers folder for reusablity to make code optimised..
+**Instructions to Run the Project**
 
-and used redis for better performance 
-and used required functions for the project which is putted in helpers folder....helpers folder is the main builing block for our project  implemented helmet and compression for security...allowed cors to access project globally...and as a backend developers we never believe the data coming from web so we need to put validations i have putted validations in helpers folder...
+**Clone the Repository**
 
+---git clone <repository_url>
+---cd url-shortener-app
+
+**Install Dependencies**
+
+---npm install
+
+**Start the Server**
+
+---node app.js
+
+**Overview of the URL Shortener Project**
+
+**---Features Implemented**
+
+API Implementation: All required APIs for URL shortening and analytics are implemented.
+
+**Rate Limiting:**
+
+Authenticated Routes: Custom rate limiter allowing 1 request per second to prevent brute-force attacks.
+
+Global Rate Limiter: Additional security to prevent excessive requests.
+
+Authentication: Secure Google Sign-In/Sign-Up authentication system.
+
+Swagger UI: Complete documentation for API endpoints with request and response structures.
+
+**Database Management:**
+
+MongoDB as the primary database.
+
+MongoDB functions are centralized in helpers/mongoFunctions.js for reusability and optimized code.
+
+Caching: Implemented Redis to improve performance.
+
+Helpers Folder: Contains core functions that support the project efficiently.
+
+**Security Implementations:**
+
+Helmet for securing HTTP headers.
+
+Compression for performance optimization.
+
+CORS enabled for global access.
+
+Validations: Since backend developers do not trust data coming from the web, validations are implemented in helpers/validations.js.
+
+Middlewares: Authentication middleware implemented in middlewares folder.
+
+**Schema Design:**
+
+Users Schema for storing user data.
+
+Analytics Schema for tracking URL analytics.
+
+Route Configuration: Centralized in helpers/routeConfig.js for better route management.
+
+Queue Management: Used Express Queue for handling asynchronous tasks.
+
+URL Redirection: Proper redirection to shortened URLs.
+
+**API Endpoints**
+
+Refer to the Swagger Documentation for a detailed list of endpoints, request formats, and responses.
+
+**Technologies Used**
+
+Node.js with Express.js for backend development
+
+MongoDB for database management
+
+Redis for caching
+
+Swagger UI for API documentation
+
+Google OAuth for authentication
+
+Helmet & Compression for security and performance
+
+Express Rate Limit for security enhancements
+
+Express Queue for optimized request handling
