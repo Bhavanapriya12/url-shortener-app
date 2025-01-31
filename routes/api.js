@@ -65,7 +65,7 @@ router.post("/social_login", async (req, res) => {
  *     summary: Google Login Callback (Sign Up / Sign In)
  *     description: |
  *       This is the callback route for Google Login.
- *       - You need not hit this route.Google itself hit this callback route and give us token in query params whenever 
+ *       - You need not hit this route.Google itself hit this callback route and give us token in query params whenever
  *         we paste the link which came as response in the above route
  *       - When a user logs in using Google, they are sent back to this route with a special **code**.
  *       - The server uses this code to get the user's Google profile (name, email, etc.).
@@ -224,15 +224,15 @@ router.post("/shorten", Auth, rateLimit(60, 60), async (req, res) => {
     createdAt: new Date(),
   };
 
-  await mongoFunctions.create_new_record("ANALYTICS", {
-    short_url: analytics_object.short_url,
-    createdAt: analytics_object.createdAt,
-  });
+  await mongoFunctions.create_new_record("ANALYTICS", analytics_object);
 
   await redisFunctions.update_redis("ANALYTICS", analytics_object);
   return res.status(200).send({
     message: "Created Shorten Url Successfully",
-    data: analytics_object,
+    data: {
+      short_url: analytics_object.short_url,
+      createdAt: analytics_object.createdAt,
+    },
   });
 });
 /**
@@ -355,23 +355,34 @@ router.get("/shorten/:alias", Auth, rateLimit(60, 60), async (req, res) => {
       short_url: data,
       users: { $elemMatch: { user_id: user_id } },
     });
+    const findOsData = await mongoFunctions.find("ANALYTICS", {
+      short_url: data,
+      os_type: { $elemMatch: { os_name: parsed_user_agent.os.name } },
+    });
+
+    const findDeviceData = await mongoFunctions.find("ANALYTICS", {
+      short_url: data,
+      device_type: {
+        $elemMatch: { device_name: parsed_user_agent.device.name },
+      },
+    });
 
     if (findUser.length > 0) {
       // Update OS and Device information if the user exists
       const findOs = await mongoFunctions.find("ANALYTICS", {
         short_url: data,
-        os_type: { $elemMatch: { os_name: parsed_user_agent.os.name } },
+        users: { $elemMatch: { os_name: parsed_user_agent.os.name } },
       });
 
       const findDevice = await mongoFunctions.find("ANALYTICS", {
         short_url: data,
-        device_type: {
+        users: {
           $elemMatch: { device_name: parsed_user_agent.device.name },
         },
       });
 
       // For OS update, use arrayFilters to ensure proper element update
-      if (findOs.length > 0) {
+      if (findOs.length === 0 && findOsData.length > 0) {
         await mongoFunctions.find_one_and_update(
           "ANALYTICS",
           { short_url: data },
@@ -403,7 +414,7 @@ router.get("/shorten/:alias", Auth, rateLimit(60, 60), async (req, res) => {
       }
 
       // For Device update, ensure unique clicks are incremented or new device is added
-      if (findDevice.length > 0) {
+      if (findDevice.length === 0 && findDeviceData.length > 0) {
         await mongoFunctions.find_one_and_update(
           "ANALYTICS",
           { short_url: data },
@@ -441,48 +452,99 @@ router.get("/shorten/:alias", Auth, rateLimit(60, 60), async (req, res) => {
     // If the user does not exist, create a new user entry and increment unique users
     if (findUser.length < 1) {
       console.log("New user detected, adding details.");
-      let s = await mongoFunctions.find_one_and_update(
-        "ANALYTICS",
-        { short_url: data },
-        {
-          $inc: { unique_users: 1 },
-          $push: {
-            users: {
-              user_id: user_id,
-              username: email,
-              os_name: parsed_user_agent.os.name,
-              device_name: parsed_user_agent.device.vendor,
+      if (findOsData.length > 0) {
+        await mongoFunctions.find_one_and_update(
+          "ANALYTICS",
+          { short_url: data },
+          {
+            $inc: {
+              "os_type.$[elem].unique_clicks": 1,
+
+              "os_type.$[elem].unique_users": 1,
+            },
+            $set: { "os_type.$[elem].os_name": parsed_user_agent.os.name },
+          },
+          {
+            arrayFilters: [{ "elem.os_name": parsed_user_agent.os.name }],
+            returnDocument: "after",
+          }
+        );
+      } else {
+        // If OS doesn't exist, push a new object to the os_type array
+        await mongoFunctions.find_one_and_update(
+          "ANALYTICS",
+          { short_url: data },
+          {
+            $push: {
+              os_type: {
+                os_name: parsed_user_agent.os.name,
+                unique_clicks: 1,
+                unique_users: 1,
+              },
             },
           },
-          $push: {
-            os_type: {
-              os_name: parsed_user_agent.os.name,
-              unique_clicks: 1,
-              unique_users: 1,
+          { returnDocument: "after" }
+        );
+      }
+      if (findDeviceData.length > 0) {
+        await mongoFunctions.find_one_and_update(
+          "ANALYTICS",
+          { short_url: data },
+          {
+            $inc: {
+              "device_type.$[elem].unique_clicks": 1,
+              "device_type.$[elem].unique_users": 1,
             },
-            device_type: {
-              device_name: parsed_user_agent.device.name,
-              unique_clicks: 1,
-              unique_users: 1,
+            $set: {
+              "device_type.$[elem].device_name": parsed_user_agent.device.name,
             },
           },
-        },
-        {},
-        { returnDocument: "after" }
-      );
-      console.log(s);
+          {
+            arrayFilters: [
+              { "elem.device_name": parsed_user_agent.device.name },
+            ],
+            returnDocument: "after",
+          }
+        );
+      } else {
+        await mongoFunctions.find_one_and_update(
+          "ANALYTICS",
+          { short_url: data },
+          {
+            $push: {
+              device_type: {
+                device_name: parsed_user_agent.device.name,
+                unique_clicks: 1,
+                unique_users: 1,
+              },
+            },
+          },
+          { returnDocument: "after" }
+        );
+      }
     }
 
     // Find the updated analytics data for the given short URL
     const url = await mongoFunctions.find_one_and_update(
       "ANALYTICS",
       { short_url: data },
-      { $inc: { total_clicks: 1 } },
+      {
+        $inc: { total_clicks: 1, unique_users: 1 },
+        $push: {
+          users: {
+            user_id: user_id,
+            username: email,
+            os_name: parsed_user_agent.os.name,
+            device_name: parsed_user_agent.device.vendor,
+          },
+        },
+      },
       {},
-      { returnDocument: "after" }
+      { returnDocument: "after" } // Corrected options parameter
     );
+
     console.log(url);
-    await redisFunctions.update_redis("ANALYTICS", url);
+    // await redisFunctions.update_redis("ANALYTICS", url);
 
     if (!url) {
       return res.status(404).send("URL not found");
