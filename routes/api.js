@@ -575,7 +575,7 @@ router.get("/shorten/:alias", Auth, rateLimit(60, 60), async (req, res) => {
 
 /**
  * @swagger
- * /api/analytics/{alias}:
+ * /api/analytics/alias/{alias}:
  *   get:
  *     summary: Get analytics for a specific short URL alias
  *     description: |
@@ -672,7 +672,7 @@ router.get("/analytics/alias/:alias", rateLimit(60, 60), async (req, res) => {
 
 /**
  * @swagger
- * /api/analytics/{topic}:
+ * /api/analytics/topic/{topic}:
  *   get:
  *     summary: Get analytics for a specific topic
  *     description: |
