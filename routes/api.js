@@ -305,6 +305,7 @@ router.get("/shorten/:alias", Auth, rateLimit(60, 60), async (req, res) => {
     const user_agent = req.headers["user-agent"];
     const parsed_user_agent = user_agent_parser(user_agent);
     const { user_id, email } = req.user;
+    console.log(parsed_user_agent);
 
     // Get the current date range (today)
     let today = new Date();
@@ -538,7 +539,7 @@ router.get("/shorten/:alias", Auth, rateLimit(60, 60), async (req, res) => {
               user_id: user_id,
               username: email,
               os_name: parsed_user_agent.os.name,
-              device_name: parsed_user_agent.device.vendor,
+              device_name: parsed_user_agent.device.name,
             },
           },
         },
