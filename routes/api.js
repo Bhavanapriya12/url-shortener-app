@@ -522,6 +522,23 @@ router.get("/shorten/:alias", Auth, rateLimit(60, 60), async (req, res) => {
           { returnDocument: "after" }
         );
       }
+      const update = await mongoFunctions.find_one_and_update(
+        "ANALYTICS",
+        { short_url: data },
+        {
+          $inc: { unique_users: 1 },
+          $push: {
+            users: {
+              user_id: user_id,
+              username: email,
+              os_name: parsed_user_agent.os.name,
+              device_name: parsed_user_agent.device.vendor,
+            },
+          },
+        },
+        {},
+        { returnDocument: "after" } // Corrected options parameter
+      );
     }
 
     // Find the updated analytics data for the given short URL
@@ -529,15 +546,7 @@ router.get("/shorten/:alias", Auth, rateLimit(60, 60), async (req, res) => {
       "ANALYTICS",
       { short_url: data },
       {
-        $inc: { total_clicks: 1, unique_users: 1 },
-        $push: {
-          users: {
-            user_id: user_id,
-            username: email,
-            os_name: parsed_user_agent.os.name,
-            device_name: parsed_user_agent.device.vendor,
-          },
-        },
+        $inc: { total_clicks: 1 },
       },
       {},
       { returnDocument: "after" } // Corrected options parameter
