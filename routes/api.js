@@ -544,7 +544,7 @@ router.get("/shorten/:alias", Auth, rateLimit(60, 60), async (req, res) => {
     );
 
     console.log(url);
-    // await redisFunctions.update_redis("ANALYTICS", url);
+    await redisFunctions.update_redis("ANALYTICS", url);
 
     if (!url) {
       return res.status(404).send("URL not found");
