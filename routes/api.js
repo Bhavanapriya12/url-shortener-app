@@ -75,15 +75,6 @@ router.post("/social_login", async (req, res) => {
  *       -Paste it in the Authorisation section to access the protected routes
  *     tags:
  *       - Authentication
- *     parameters:
- *       - in: query
- *         name: code
- *         required: true
- *         schema:
- *           type: string
- *         description: |
- *           A special code given by Google after a user logs in.
- *           The server exchanges this code for an access token to get user details.
  *     responses:
  *       302:
  *         description: |
